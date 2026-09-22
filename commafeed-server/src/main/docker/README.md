@@ -74,6 +74,37 @@ optional and have sensible default values.
 Settings are overrideable with environment variables. For instance, `commafeed.feed-refresh.interval-empirical` can be
 set with the `COMMAFEED_FEED_REFRESH_INTERVAL_EMPIRICAL` variable.
 
+### Running as a specific user (PUID/PGID)
+
+By default, the container starts as root, creates a `commafeed` user/group and immediately drops privileges to it
+before running the application. You can control the user/group ID it drops to with the `PUID` and `PGID` environment
+variables, which is useful to match the ownership of a bind-mounted `data` directory on the host (e.g. `99:100` on
+unRAID, or the output of `id $USER` on a regular Linux host):
+
+```
+docker run --name commafeed --detach --publish 8082:8082 --restart unless-stopped \
+    --volume /path/to/commafeed/data:/commafeed/data \
+    --env PUID=99 --env PGID=100 \
+    --memory 256M athou/commafeed:latest-h2
+```
+
+```
+services:
+  commafeed:
+    image: athou/commafeed:latest-h2
+    restart: unless-stopped
+    environment:
+      - PUID=99
+      - PGID=100
+    volumes:
+      - ./data:/commafeed/data
+    ports:
+      - 8082:8082
+```
+
+Both variables default to `1000` if unset. If the container is started with a non-root user (e.g. via docker's
+`--user` flag), `PUID`/`PGID` are ignored and the application simply runs as that user.
+
 When logging in, credentials are stored in an encrypted cookie. The encryption key is randomly generated at startup,
 meaning that you will have to log back in after each restart of the application. To prevent this, you can set the
 `QUARKUS_HTTP_AUTH_SESSION_ENCRYPTION_KEY` variable to a fixed value (min. 16 characters).
@@ -93,6 +124,16 @@ Tags are of the form `<version>-<database>[-jvm]` where:
     - `master` (always points to the latest git commit)
 - `<database>` is the database to use (`h2`, `postgresql`, `mysql` or `mariadb`)
 - `-jvm` is optional and indicates that CommaFeed is running on a JVM, and not compiled natively.
+
+## GitHub Container Registry
+
+In addition to Docker Hub, images from this fork are also published to `ghcr.io/gittimeraider/commafeed`. A new image
+is built and pushed automatically on every push to this repository (except commits that only change `.md` files), and
+can also be triggered manually from the "Actions" tab on GitHub (select the `ci` workflow, then "Run workflow").
+
+Tags are of the form `<branch>-<database>[-jvm]` (floating, updated on every matching push) and
+`<branch>-<database>[-jvm]-<short-sha>` (pinned to the exact commit), e.g. `ghcr.io/gittimeraider/commafeed:master-h2`
+or `ghcr.io/gittimeraider/commafeed:master-h2-a1b2c3d`.
 
 ## FAQ
 
