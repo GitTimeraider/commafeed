@@ -42,6 +42,10 @@ Docker is the easiest way to get started with self-hosted CommaFeed.
 
 Docker images are built automatically and are available at https://hub.docker.com/r/athou/commafeed
 
+This fork additionally publishes images to `ghcr.io/gittimeraider/commafeed` on every push (see
+[commafeed-server/src/main/docker/README.md](commafeed-server/src/main/docker/README.md) for tags and the `PUID`/`PGID`
+environment variables).
+
 ### Cloud hosting
 
 [PikaPods](https://www.pikapods.com) offers 1-click cloud hosting solutions starting at $1/month with a free $5
