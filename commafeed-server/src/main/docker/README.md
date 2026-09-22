@@ -127,13 +127,14 @@ Tags are of the form `<version>-<database>[-jvm]` where:
 
 ## GitHub Container Registry
 
-In addition to Docker Hub, images from this fork are also published to `ghcr.io/gittimeraider/commafeed`. A new image
-is built and pushed automatically on every push to this repository (except commits that only change `.md` files), and
-can also be triggered manually from the "Actions" tab on GitHub (select the `ci` workflow, then "Run workflow").
+This fork publishes a single image, `ghcr.io/gittimeraider/commafeed` (H2 database, native build, `linux/amd64`
+only). It's built and pushed automatically on every push to this repository (except commits that only change `.md`
+files), and can also be triggered manually from the "Actions" tab on GitHub (select the `ci` workflow, then
+"Run workflow").
 
-Tags are of the form `<branch>-<database>[-jvm]` (floating, updated on every matching push) and
-`<branch>-<database>[-jvm]-<short-sha>` (pinned to the exact commit), e.g. `ghcr.io/gittimeraider/commafeed:master-h2`
-or `ghcr.io/gittimeraider/commafeed:master-h2-a1b2c3d`.
+Tags are of the form `<branch>` (floating, updated on every matching push) and `<branch>-<short-sha>` (pinned to the
+exact commit), e.g. `ghcr.io/gittimeraider/commafeed:master` or `ghcr.io/gittimeraider/commafeed:master-a1b2c3d`.
+Pushes to `master` also update the `latest` tag.
 
 ## FAQ
 
