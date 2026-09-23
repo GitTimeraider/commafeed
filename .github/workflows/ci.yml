@@ -44,9 +44,13 @@ jobs:
       # Build
       # -Ob is GraalVM's quick build mode: much faster native compile, slightly less optimized binary.
       # -H:PageSize=65536 is repeated from application.properties because this flag replaces it.
+      # Pull requests (including Dependabot's) run the server and client unit tests (~20s) but skip the slow
+      # Playwright integration tests; pushes skip all tests so images publish faster.
       - name: Build with Maven
+        env:
+          TEST_FLAGS: ${{ github.event_name == 'pull_request' && '-DskipITs' || '-DskipTests' }}
         run: >
-          mvn --batch-mode --no-transfer-progress install -Pnative -Ph2 -DskipTests
+          mvn --batch-mode --no-transfer-progress install -Pnative -Ph2 $TEST_FLAGS
           -Dquarkus.native.additional-build-args=-H:PageSize=65536,-Ob
 
       - name: Upload native executable
@@ -89,17 +93,24 @@ jobs:
             mv "$f" "$(echo "$f" | sed 's/x86_64/amd64/')"
           done
 
-      # Compute a lowercase, tag-safe image reference for GHCR (ghcr.io requires lowercase,
-      # and branch names may contain slashes which aren't valid in a docker tag)
+      # Compute a lowercase, tag-safe image reference for GHCR.
+      # github.* values are passed through env instead of ${{ }} inside the script: branch names may contain
+      # characters like ' $( ; that would otherwise be executed as shell code.
       - name: Compute GHCR image reference
         if: ${{ github.event_name != 'pull_request' }}
+        env:
+          REPOSITORY: ${{ github.repository }}
+          REF_NAME: ${{ github.ref_name }}
+          SHA: ${{ github.sha }}
         run: |
-          GHCR_IMAGE="ghcr.io/$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')"
-          GHCR_TAG_REF="$(echo '${{ github.ref_name }}' | tr '/' '-')"
-          GHCR_SHORT_SHA="$(echo '${{ github.sha }}' | cut -c1-7)"
+          GHCR_IMAGE="ghcr.io/${REPOSITORY,,}"
+          # Docker tags only allow [A-Za-z0-9_.-], can't start with '.' or '-', and are at most 128 characters.
+          GHCR_TAG_REF="$(printf '%s' "$REF_NAME" | tr -c 'A-Za-z0-9_.-' '-' | sed 's/^[.-]*//' | cut -c1-100)"
+          GHCR_TAG_REF="${GHCR_TAG_REF:-branch}"
+          GHCR_SHORT_SHA="${SHA:0:7}"
 
           TAGS=("${GHCR_IMAGE}:${GHCR_TAG_REF}" "${GHCR_IMAGE}:${GHCR_TAG_REF}-${GHCR_SHORT_SHA}")
-          if [ "${{ github.ref_name }}" = "master" ]; then
+          if [ "$REF_NAME" = "master" ]; then
             TAGS+=("${GHCR_IMAGE}:latest")
           fi
 
