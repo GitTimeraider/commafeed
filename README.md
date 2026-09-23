@@ -52,7 +52,13 @@ docker run --name commafeed --detach --publish 8082:8082 --restart unless-stoppe
 
 The app will be accessible on http://localhost:8082/. See
 [commafeed-server/src/main/docker/README.md](commafeed-server/src/main/docker/README.md) for docker-compose examples,
-image tags, `PUID`/`PGID` details, and how to run with `--cap-drop=ALL`.
+image tags and `PUID`/`PGID` details.
+
+> **Hardening with `--cap-drop=ALL`?** `PUID`/`PGID` can't work then, because switching user needs capabilities that
+> flag removes. Use `--user 99:100` instead of `PUID`/`PGID`, and make sure your data directory is already owned by
+> that user/group on the host. See
+> [Using `--cap-drop=ALL`](commafeed-server/src/main/docker/README.md#using---cap-dropall----security-optno-new-privilegestrue)
+> for details and unRAID steps.
 
 ### Build from sources
 

@@ -76,16 +76,27 @@ services:
 Both variables default to `1000` if unset. If the container is started with a non-root user (e.g. via docker's
 `--user` flag), `PUID`/`PGID` are ignored and the application simply runs as that user.
 
+> **Using `--cap-drop=ALL`?** Then `PUID`/`PGID` will not work. Use `--user 99:100` instead of `PUID`/`PGID`. See
+> the next section.
+
 #### Using `--cap-drop=ALL` / `--security-opt=no-new-privileges:true`
 
-`PUID`/`PGID` work by starting the container as root and dropping down to that user/group right before running the
-application, which needs a couple of Linux capabilities (`CAP_SETUID`/`CAP_SETGID` to switch user, `CAP_CHOWN` to fix
-up ownership of the data directory). `--cap-drop=ALL` removes those, so root inside the container can no longer drop
-privileges at all, and the container will fail to start.
+`PUID`/`PGID` work by starting the container as root and switching to that user/group right before running the
+application. Switching user needs the `SETUID`/`SETGID` Linux capabilities, and `--cap-drop=ALL` removes them, so the
+container stops at startup with:
 
-If you're already running the container with `--cap-drop=ALL` (or similar hardening), skip `PUID`/`PGID` entirely and
-run directly as your target user/group with docker's own `--user` flag instead. This needs no capabilities, since
-the container never runs as root in the first place:
+```
+entrypoint: cannot switch from root to PUID:PGID (99:100): the container is missing the
+entrypoint: SETUID/SETGID capabilities (usually because of --cap-drop=ALL).
+```
+
+(Older images showed `usermod: Failed to change ownership of the home directory` or
+`error: failed switching to 'commafeed:commafeed': operation not permitted` for the same problem.)
+
+There are two ways to fix it:
+
+**Option 1 (recommended): run directly as your user with `--user`, and remove `PUID`/`PGID`.** Docker then starts the
+container as that user, so it never runs as root and needs no capabilities at all:
 
 ```
 docker run --name commafeed --detach --publish 8082:8082 --restart unless-stopped \
@@ -95,8 +106,75 @@ docker run --name commafeed --detach --publish 8082:8082 --restart unless-stoppe
     --memory 256M ghcr.io/gittimeraider/commafeed:latest
 ```
 
-This only works if `/path/to/commafeed/data` is already owned by that user/group on the host (e.g. `chown -R 99:100
-/path/to/commafeed/data`), since the container can no longer fix that up itself without `CAP_CHOWN`.
+```
+services:
+  commafeed:
+    image: ghcr.io/gittimeraider/commafeed:latest
+    restart: unless-stopped
+    user: "99:100"
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    volumes:
+      - ./data:/commafeed/data
+    ports:
+      - 8082:8082
+```
+
+On unRAID: in the **Docker** tab, click the CommaFeed icon and choose **Edit**, switch on **Advanced View** (top
+right), put `--user 99:100 --cap-drop=ALL --security-opt=no-new-privileges:true` in the **Extra Parameters** field,
+delete the `PUID` and `PGID` variables, and click **Apply**.
+
+With this option the container can't fix file ownership itself, so the data directory must already exist and be owned
+by that user/group on the host. If it doesn't exist yet, Docker creates it owned by root and CommaFeed won't be able to
+write to it. Create it first, on the host, before starting the container:
+
+```
+mkdir -p /path/to/commafeed/data
+chown -R 99:100 /path/to/commafeed/data
+```
+
+For docker-compose, run this in the folder containing `docker-compose.yml`, using `./data` as the path. On unRAID, run
+it in the web terminal (the `>_` icon at the top right) against your appdata folder, e.g. `/mnt/user/appdata/commafeed`.
+
+**Option 2: keep `PUID`/`PGID` and add back only the two capabilities needed to switch user:**
+
+```
+docker run --name commafeed --detach --publish 8082:8082 --restart unless-stopped \
+    --volume /path/to/commafeed/data:/commafeed/data \
+    --env PUID=99 --env PGID=100 \
+    --cap-drop=ALL --cap-add=SETUID --cap-add=SETGID --security-opt=no-new-privileges:true \
+    --memory 256M ghcr.io/gittimeraider/commafeed:latest
+```
+
+```
+services:
+  commafeed:
+    image: ghcr.io/gittimeraider/commafeed:latest
+    restart: unless-stopped
+    environment:
+      - PUID=99
+      - PGID=100
+    cap_drop:
+      - ALL
+    cap_add:
+      - SETUID
+      - SETGID
+    security_opt:
+      - no-new-privileges:true
+    volumes:
+      - ./data:/commafeed/data
+    ports:
+      - 8082:8082
+```
+
+On unRAID, keep the `PUID`/`PGID` variables and put
+`--cap-drop=ALL --cap-add=SETUID --cap-add=SETGID --security-opt=no-new-privileges:true` in **Extra Parameters**.
+
+The container briefly runs as root before switching, so this is slightly less locked down than option 1. You'll also
+see `entrypoint: could not chown /commafeed/data (missing CAP_CHOWN?), continuing` at startup; that's harmless as
+long as the data directory is already owned by `PUID:PGID` on the host.
 
 ## Image and tags
 
