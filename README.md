@@ -13,9 +13,13 @@ the upstream project.
   `99:100` on unRAID) and match the ownership of your `data` directory.
 - A single Docker image is published to `ghcr.io/gittimeraider/commafeed` (H2 embedded database, native build,
   `linux/amd64`) on every push, instead of the upstream Docker Hub images.
-- The CI pipeline is trimmed down to building and publishing that one image. It does not run the test suite, create
-  GitHub releases, or publish precompiled packages.
+- The CI pipeline is trimmed down to building and publishing that one image. Pull requests run the unit tests; pushes
+  skip tests to publish faster. It does not create GitHub releases or publish precompiled packages.
 - Dependencies (Maven, npm, Docker base images and GitHub Actions) are checked weekly by Dependabot instead of Renovate.
+- Upstream files this fork doesn't use (the JVM Dockerfile, the release script and Renovate/stale-bot/sponsor configs)
+  are removed. [CHANGELOG.md](CHANGELOG.md) is kept as-is: it's the upstream project's changelog.
+
+See [Maintaining this fork](#maintaining-this-fork) for how to pull in upstream changes and keep things up to date.
 
 ## Features
 
@@ -118,10 +122,25 @@ All other Quarkus settings can be found [here](https://quarkus.io/guides/all-con
 
 When started, the server will listen on http://localhost:8082.
 
+### Securing your instance
+
+- CommaFeed serves plain HTTP on port 8082. If it's reachable from outside your local network, put it behind a reverse
+  proxy that terminates HTTPS (e.g. Nginx Proxy Manager, Caddy, Traefik or SWAG) instead of exposing the port directly.
+- Set `quarkus.http.auth.session.encryption-key` (`QUARKUS_HTTP_AUTH_SESSION_ENCRYPTION_KEY` as an environment
+  variable) to a long random value, so logins survive restarts. Keep it secret: anyone with it can forge login cookies.
+- Leave `commafeed.http-client.block-local-addresses` at its default (`true`) unless you need feeds from your local
+  network, and then only if you trust every user of your instance (see the [FAQ](#faq)).
+- Use a non-root `PUID`/`PGID` for the Docker image (the container refuses `0`), and optionally
+  `--cap-drop=ALL` with `--user` as described in the [Docker README](commafeed-server/src/main/docker/README.md).
+
 ### Updates
 
 The Docker image is rebuilt on every push to this repository. To update, pull `ghcr.io/gittimeraider/commafeed:latest`
-again and recreate the container.
+again and recreate the container (on unRAID: **Docker** tab → **Check for Updates** → **Apply Update**).
+
+`latest` changes with every push to `master`. If you'd rather update deliberately, use a pinned tag like
+`master-a1b2c3d` (one exact commit) and change it when you choose to; the available tags are listed on the
+repository's GitHub page under **Packages** → `commafeed`.
 
 ### Memory management
 
@@ -153,7 +172,7 @@ slightly slower throughput.
 
 IBM provides precompiled binaries for OpenJ9
 named [Semeru](https://developer.ibm.com/languages/java/semeru-runtimes/downloads/).
-This is the JVM used in [Dockerfile.jvm](commafeed-server/src/main/docker/Dockerfile.jvm).
+The upstream project uses it for its JVM Docker image; this fork only publishes the native image.
 
 ## FAQ
 
@@ -208,3 +227,75 @@ two-letters [ISO-639-1 language code](http://en.wikipedia.org/wiki/List_of_ISO_6
 
 The frontend server is now running at http://localhost:8082 and is proxying REST requests to the backend running on
 port 8083
+
+## Maintaining this fork
+
+### Pulling in upstream changes
+
+Dependabot only updates dependency versions. Fixes to CommaFeed's own code (including security fixes) only arrive
+when you sync from [Athou/commafeed](https://github.com/Athou/commafeed), so do this regularly, e.g. when upstream
+publishes a release.
+
+If there are no conflicts: on this repository's GitHub page, click **Sync fork** (above the file list), then
+**Update branch**.
+
+If GitHub reports conflicts, merge on your own computer instead, in a terminal inside your clone of this repository:
+
+```
+git remote add upstream https://github.com/Athou/commafeed.git   # only needed the first time
+git fetch upstream
+git checkout master
+git merge upstream/master
+# resolve the conflicts (see below), then:
+git push origin master
+```
+
+Conflicts can only happen in the files this fork changed. How to resolve them:
+
+| Files | Resolution |
+|---|---|
+| Deleted in this fork: `.github/FUNDING.yml`, `.github/stale.yml`, `renovate.json`, `release.sh`, `commafeed-server/src/main/docker/Dockerfile.jvm` | Keep them deleted: `git rm <file>` |
+| Changed in this fork: `.github/workflows/ci.yml`, `commafeed-server/src/main/docker/Dockerfile.native`, `README.md`, `commafeed-server/src/main/docker/README.md`, `SECURITY.md`, `.github/ISSUE_TEMPLATE/bug_report.md` | Keep this fork's version, but copy over upstream changes that still apply (e.g. a newer base image on the `FROM` line of `Dockerfile.native`) |
+| `pom.xml`, `commafeed-client/package.json` (upstream and Dependabot bumped the same dependency) | Take the higher version |
+| `commafeed-client/package-lock.json` | Don't edit by hand: take either side, then run `npm install` in `commafeed-client` to regenerate it |
+
+Pushing the merge to `master` builds and publishes a new image automatically.
+
+Nothing in this repository depends on the upstream repository, so the fork can be detached later (GitHub Support can
+do this). After that the **Sync fork** button disappears and you no longer receive upstream fixes, but CI, Dependabot
+and the Docker image keep working unchanged.
+
+### Dependency updates (Dependabot)
+
+[.github/dependabot.yml](.github/dependabot.yml) checks Maven, npm, the Docker base image and GitHub Actions every
+Monday. Minor and patch updates are grouped into one PR per ecosystem; major updates get their own PR. Dependabot keeps
+at most 5 PRs open per ecosystem, so merge or close them to get new ones. Each PR runs the unit tests and builds the
+image; merging it publishes a new image.
+
+For security fixes as soon as they're announced (rather than weekly), enable **Dependabot alerts** and **Dependabot
+security updates** under **Settings** → **Code security** on this repository's GitHub page.
+
+Dependabot can't see these versions, so bump them by hand now and then:
+
+- `GOSU_VERSION` in [Dockerfile.native](commafeed-server/src/main/docker/Dockerfile.native). The `sha256` checksums
+  in the same `RUN` step must be updated too, or the build fails. Get them with
+  `curl -fsSL https://github.com/tianon/gosu/releases/download/<version>/gosu-amd64 | sha256sum` (and the same for
+  `gosu-arm64`).
+- `node.version` and `npm.version` in [commafeed-client/pom.xml](commafeed-client/pom.xml).
+- `google-java-format.version` in [commafeed-server/pom.xml](commafeed-server/pom.xml).
+
+While the fork is still attached, upstream updates the last two for you when you sync.
+
+### CI and images
+
+[.github/workflows/ci.yml](.github/workflows/ci.yml) runs:
+
+- **On every push**, to any branch: builds the native image without running tests and publishes it to
+  `ghcr.io/gittimeraider/commafeed` as `<branch>` and `<branch>-<short-sha>` (plus `latest` for `master`). Commits
+  that only change `.md` files, and pushes to Dependabot's own branches, are skipped.
+- **On pull requests**: runs the server and client unit tests and builds the image, without publishing anything.
+- **Manually**: **Actions** tab → **ci** → **Run workflow**.
+
+Every branch push leaves images behind in the registry. To clean them up, open **Packages** → `commafeed` on this
+repository's GitHub page, then **Package settings** / the version list, and delete versions you no longer need. Don't
+delete the version currently tagged `latest`, or one you've pinned on your server.

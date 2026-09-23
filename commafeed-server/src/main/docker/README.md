@@ -73,8 +73,10 @@ services:
       - 8082:8082
 ```
 
-Both variables default to `1000` if unset. If the container is started with a non-root user (e.g. via docker's
-`--user` flag), `PUID`/`PGID` are ignored and the application simply runs as that user.
+Both variables default to `1000` if unset. They must be whole, non-zero numbers: the container refuses to start with
+a value like `99 ` (trailing space) or `0` (root), and prints which variable is wrong. If the container is started with
+a non-root user (e.g. via docker's `--user` flag), `PUID`/`PGID` are ignored and the application simply runs as that
+user; the log then says so.
 
 > **Using `--cap-drop=ALL`?** Then `PUID`/`PGID` will not work. Use `--user 99:100` instead of `PUID`/`PGID`. See
 > the next section.
@@ -188,10 +190,21 @@ Tags:
 - `<branch>`: the latest push to that branch (e.g. `master`)
 - `<branch>-<short-sha>`: pinned to one exact commit (e.g. `master-a1b2c3d`)
 
+Images are published without running the test suite, so a broken commit can reach `latest`. If you'd rather update
+deliberately, use a `master-<short-sha>` tag and change it when you choose to. The available tags are listed on the
+repository's GitHub page under **Packages** → `commafeed`.
+
 The image only includes the H2 database driver. To use PostgreSQL, MySQL or MariaDB instead, build from source with the
 matching Maven profile (see the main README).
 
 ## FAQ
+
+### Is it safe to expose to the internet?
+
+CommaFeed serves plain HTTP on port 8082. If it's reachable from outside your local network, put it behind a reverse
+proxy that terminates HTTPS (e.g. Nginx Proxy Manager, Caddy, Traefik or SWAG) instead of publishing the port directly,
+and set `QUARKUS_HTTP_AUTH_SESSION_ENCRYPTION_KEY` to a long random secret. See
+[Securing your instance](../../../../README.md#securing-your-instance) in the main README.
 
 ### Getting "Access to local address blocked" when adding a feed
 
