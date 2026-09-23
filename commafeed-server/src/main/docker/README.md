@@ -105,6 +105,28 @@ services:
 Both variables default to `1000` if unset. If the container is started with a non-root user (e.g. via docker's
 `--user` flag), `PUID`/`PGID` are ignored and the application simply runs as that user.
 
+#### Using `--cap-drop=ALL` / `--security-opt=no-new-privileges:true`
+
+`PUID`/`PGID` work by starting the container as root and dropping down to that user/group right before running the
+application, which needs a couple of Linux capabilities (`CAP_SETUID`/`CAP_SETGID` to switch user, `CAP_CHOWN` to fix
+up ownership of the data directory). `--cap-drop=ALL` removes those, so root inside the container can no longer drop
+privileges at all, and the container will fail to start.
+
+If you're already running the container with `--cap-drop=ALL` (or similar hardening), skip `PUID`/`PGID` entirely and
+run directly as your target user/group with docker's own `--user` flag instead — this needs no capabilities, since
+the container never runs as root in the first place:
+
+```
+docker run --name commafeed --detach --publish 8082:8082 --restart unless-stopped \
+    --volume /path/to/commafeed/data:/commafeed/data \
+    --user 99:100 \
+    --cap-drop=ALL --security-opt=no-new-privileges:true \
+    --memory 256M athou/commafeed:latest-h2
+```
+
+This only works if `/path/to/commafeed/data` is already owned by that user/group on the host (e.g. `chown -R 99:100
+/path/to/commafeed/data`), since the container can no longer fix that up itself without `CAP_CHOWN`.
+
 When logging in, credentials are stored in an encrypted cookie. The encryption key is randomly generated at startup,
 meaning that you will have to log back in after each restart of the application. To prevent this, you can set the
 `QUARKUS_HTTP_AUTH_SESSION_ENCRYPTION_KEY` variable to a fixed value (min. 16 characters).
