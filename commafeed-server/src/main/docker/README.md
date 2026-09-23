@@ -126,15 +126,51 @@ On unRAID: in the **Docker** tab, click the CommaFeed icon and choose **Edit**, 
 right), put `--user 99:100 --cap-drop=ALL --security-opt=no-new-privileges:true` in the **Extra Parameters** field,
 delete the `PUID` and `PGID` variables, and click **Apply**.
 
-With this option the container can't fix file ownership itself, so the data directory must already be owned by that
-user/group on the host, e.g. `chown -R 99:100 /path/to/commafeed/data` (on unRAID, run it in the web terminal against
-your appdata folder).
+With this option the container can't fix file ownership itself, so the data directory must already exist and be owned
+by that user/group on the host. If it doesn't exist yet, Docker creates it owned by root and CommaFeed won't be able to
+write to it. Create it first, on the host, before starting the container:
+
+```
+mkdir -p /path/to/commafeed/data
+chown -R 99:100 /path/to/commafeed/data
+```
+
+For docker-compose, run this in the folder containing `docker-compose.yml`, using `./data` as the path. On unRAID, run
+it in the web terminal (the `>_` icon at the top right) against your appdata folder, e.g. `/mnt/user/appdata/commafeed`.
 
 **Option 2: keep `PUID`/`PGID` and add back only the two capabilities needed to switch user:**
 
 ```
---cap-drop=ALL --cap-add=SETUID --cap-add=SETGID --security-opt=no-new-privileges:true
+docker run --name commafeed --detach --publish 8082:8082 --restart unless-stopped \
+    --volume /path/to/commafeed/data:/commafeed/data \
+    --env PUID=99 --env PGID=100 \
+    --cap-drop=ALL --cap-add=SETUID --cap-add=SETGID --security-opt=no-new-privileges:true \
+    --memory 256M ghcr.io/gittimeraider/commafeed:latest
 ```
+
+```
+services:
+  commafeed:
+    image: ghcr.io/gittimeraider/commafeed:latest
+    restart: unless-stopped
+    environment:
+      - PUID=99
+      - PGID=100
+    cap_drop:
+      - ALL
+    cap_add:
+      - SETUID
+      - SETGID
+    security_opt:
+      - no-new-privileges:true
+    volumes:
+      - ./data:/commafeed/data
+    ports:
+      - 8082:8082
+```
+
+On unRAID, keep the `PUID`/`PGID` variables and put
+`--cap-drop=ALL --cap-add=SETUID --cap-add=SETGID --security-opt=no-new-privileges:true` in **Extra Parameters**.
 
 The container briefly runs as root before switching, so this is slightly less locked down than option 1. You'll also
 see `entrypoint: could not chown /commafeed/data (missing CAP_CHOWN?), continuing` at startup; that's harmless as
