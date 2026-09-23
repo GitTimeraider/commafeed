@@ -2,7 +2,19 @@
 
 Google Reader inspired self-hosted RSS reader, based on Quarkus and React/TypeScript.
 
+This is a fork of [Athou/commafeed](https://github.com/Athou/commafeed). All credit for the application itself goes to
+the upstream project.
+
 ![preview](https://user-images.githubusercontent.com/1256795/184886828-1973f148-58a9-4c6d-9587-ee5e5d3cc2cb.png)
+
+## What's different in this fork
+
+- The Docker image supports `PUID`/`PGID` environment variables, so the application can run as any user/group (e.g.
+  `99:100` on unRAID) and match the ownership of your `data` directory.
+- A single Docker image is published to `ghcr.io/gittimeraider/commafeed` (H2 embedded database, native build,
+  `linux/amd64`) on every push, instead of the upstream Docker Hub images.
+- The CI pipeline is trimmed down to building and publishing that one image. It does not run the test suite, create
+  GitHub releases, or publish precompiled packages.
 
 ## Features
 
@@ -18,10 +30,10 @@ Google Reader inspired self-hosted RSS reader, based on Quarkus and React/TypeSc
 - Fever and Google Reader API for native mobile apps
 - Can automatically mark articles as read based on user-defined rules
 - Push notifications when new articles are published
-- Highly customizable with [custom CSS](https://athou.github.io/commafeed/documentation/custom-css) and JavaScript
+- Highly customizable with [custom CSS](documentation/CUSTOMCSS.md) and JavaScript
 - [Browser extension](https://github.com/Athou/commafeed-browser-extension)
 - Compiles to native code for blazing fast startup and low memory usage
-- Supports 4 databases
+- Supports 4 databases (the published Docker image uses H2; build from source for the others)
     - H2 (embedded database)
     - PostgreSQL
     - MySQL
@@ -29,45 +41,18 @@ Google Reader inspired self-hosted RSS reader, based on Quarkus and React/TypeSc
 
 ## Usage
 
-### Public instance
-
-A free public instance is available at https://www.commafeed.com.
-
-It has no ads, no tracking, and your data is never exploited or sold to third parties. The service is funded entirely through donations.
-However, this public instance does have a few limitations compared to self-hosted setups, outlined [here](https://github.com/Athou/commafeed/discussions/1567).
-
 ### Docker
 
-Docker is the easiest way to get started with self-hosted CommaFeed.
+```
+docker run --name commafeed --detach --publish 8082:8082 --restart unless-stopped \
+    --volume /path/to/commafeed/data:/commafeed/data \
+    --env PUID=99 --env PGID=100 \
+    --memory 256M ghcr.io/gittimeraider/commafeed:latest
+```
 
-Docker images are built automatically and are available at https://hub.docker.com/r/athou/commafeed
-
-This fork additionally publishes images to `ghcr.io/gittimeraider/commafeed` on every push (see
-[commafeed-server/src/main/docker/README.md](commafeed-server/src/main/docker/README.md) for tags and the `PUID`/`PGID`
-environment variables).
-
-### Cloud hosting
-
-[PikaPods](https://www.pikapods.com) offers 1-click cloud hosting solutions starting at $1/month with a free $5
-welcome credit and officially supports CommaFeed.
-PikaPods shares 20% of the revenue back to CommaFeed.
-
-[![PikaPods](https://www.pikapods.com/static/run-button.svg)](https://www.pikapods.com/pods?run=commafeed)
-
-### Download a precompiled package
-
-Go to the [release page](https://github.com/Athou/commafeed/releases) and download the latest version for your operating
-system and database of choice.
-
-There are two types of packages:
-
-- The `linux-x86_64`, `linux-aarch_64` and `windows-x86_64` packages are compiled natively and contain an executable that can be run
-  directly.
-- The `jvm` package is a zip file containing all `.jar` files required to run the application. This package works on all
-  platforms but requires a JRE and is started with `java -jar quarkus-run.jar`.
-
-If available for your operating system, the native package is recommended because it has a faster startup time and lower
-memory usage.
+The app will be accessible on http://localhost:8082/. See
+[commafeed-server/src/main/docker/README.md](commafeed-server/src/main/docker/README.md) for docker-compose examples,
+image tags, `PUID`/`PGID` details, and how to run with `--cap-drop=ALL`.
 
 ### Build from sources
 
@@ -86,9 +71,8 @@ When the build is complete:
 - if you used the native profile, the executable is located at
   `commafeed-server/target/commafeed-<version>-<database>-<platform>-<arch>-runner[.exe]`
 
-### Distribution packages
-
-- Arch Linux users can use [the CommaFeed package on AUR](https://aur.archlinux.org/pkgbase/commafeed), which builds native binaries with GraalVM for all supported databases.
+If available for your operating system, the native build is recommended because it has a faster startup time and lower
+memory usage.
 
 ## Configuration
 
@@ -117,7 +101,8 @@ There are multiple ways to configure CommaFeed:
 
 When in doubt, the properties file is recommended because CommaFeed will be able to warn about invalid properties and typos.
 
-All [CommaFeed settings](https://athou.github.io/commafeed/documentation) are optional and have sensible default values.
+All [CommaFeed settings](https://athou.github.io/commafeed/documentation) (upstream documentation, which also applies to
+this fork) are optional and have sensible default values.
 
 When logging in, credentials are stored in an encrypted cookie. The encryption key is randomly generated at startup,
 meaning that you will have to log back in after each restart of the application. To prevent this, you can set the
@@ -128,7 +113,8 @@ When started, the server will listen on http://localhost:8082.
 
 ### Updates
 
-When CommaFeed is up and running, you can subscribe to [this feed](https://github.com/Athou/commafeed/releases.atom) to be notified of new releases.
+The Docker image is rebuilt on every push to this repository. To update, pull `ghcr.io/gittimeraider/commafeed:latest`
+again and recreate the container.
 
 ### Memory management
 
@@ -136,12 +122,12 @@ The Java Virtual Machine (JVM) is rather greedy by default and will not release 
 operating system. This is because acquiring memory from the operating system is a relatively expensive operation.
 This can be problematic on systems with limited memory.
 
-#### Hard limit (`native` and `jvm` packages)
+#### Hard limit (`native` and `jvm` builds)
 
 The JVM can be configured to use a maximum amount of memory with the `-Xmx` parameter.
 For example, to limit the JVM to 256MB of memory, use `-Xmx256m`.
 
-#### Dynamic sizing (`jvm` package)
+#### Dynamic sizing (`jvm` build)
 
 In addition to the previous setting, the JVM can be configured to release unused memory to the operating system with the
 following parameters:
@@ -153,15 +139,14 @@ and [here](https://docs.oracle.com/en/java/javase/17/gctuning/factors-affecting-
 more
 information.
 
-#### OpenJ9 (`jvm` package)
+#### OpenJ9 (`jvm` build)
 
 The [OpenJ9](https://eclipse.dev/openj9/) JVM is a more memory-efficient alternative to the HotSpot JVM, at the cost of
 slightly slower throughput.
 
 IBM provides precompiled binaries for OpenJ9
 named [Semeru](https://developer.ibm.com/languages/java/semeru-runtimes/downloads/).
-This is the JVM used in
-the [Docker image](https://github.com/Athou/commafeed/blob/master/commafeed-server/src/main/docker/Dockerfile.jvm).
+This is the JVM used in [Dockerfile.jvm](commafeed-server/src/main/docker/Dockerfile.jvm).
 
 ## FAQ
 
@@ -187,8 +172,7 @@ quarkus.http.host-validation.allowed-hosts=commafeed.example.com
 
 ## Translation
 
-Files for internationalization are
-located [here](https://github.com/Athou/commafeed/tree/master/commafeed-client/src/locales).
+Files for internationalization are located in [commafeed-client/src/locales](commafeed-client/src/locales).
 
 To add a new language:
 

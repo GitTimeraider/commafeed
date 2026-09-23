@@ -1,21 +1,26 @@
 # CommaFeed
 
-Official docker images for https://github.com/Athou/commafeed/
+Docker image for [GitTimeraider/commafeed](https://github.com/GitTimeraider/commafeed), a fork of
+[Athou/commafeed](https://github.com/Athou/commafeed) with `PUID`/`PGID` support.
 
 ## Quickstart
 
-Start CommaFeed with a H2 embedded database. The app will be accessible on http://localhost:8082/
+Start CommaFeed with its H2 embedded database. The app will be accessible on http://localhost:8082/
 
 ### docker
 
-`docker run --name commafeed --detach --publish 8082:8082 --restart unless-stopped --volume /path/to/commafeed/data:/commafeed/data --memory 256M athou/commafeed:latest-h2`
+```
+docker run --name commafeed --detach --publish 8082:8082 --restart unless-stopped \
+    --volume /path/to/commafeed/data:/commafeed/data \
+    --memory 256M ghcr.io/gittimeraider/commafeed:latest
+```
 
 ### docker-compose
 
 ```
 services:
   commafeed:
-    image: athou/commafeed:latest-h2
+    image: ghcr.io/gittimeraider/commafeed:latest
     restart: unless-stopped
     volumes:
       - ./data:/commafeed/data
@@ -27,52 +32,18 @@ services:
       - 8082:8082
 ```
 
-## Advanced
-
-While using the H2 embedded database is perfectly fine for small instances, you may want to have more control over the
-database. Here's an example that uses PostgreSQL (note the image tag change from `latest-h2` to `latest-postgresql`):
-
-```
-services:
-  commafeed:
-    image: athou/commafeed:latest-postgresql
-    restart: unless-stopped
-    environment:
-      - QUARKUS_DATASOURCE_JDBC_URL=jdbc:postgresql://postgresql:5432/commafeed
-      - QUARKUS_DATASOURCE_USERNAME=commafeed
-      - QUARKUS_DATASOURCE_PASSWORD=commafeed
-    deploy:
-      resources:
-        limits:
-          memory: 256M
-    ports:
-      - 8082:8082
-
-  postgresql:
-    image: postgres:latest
-    restart: unless-stopped
-    environment:
-      POSTGRES_USER: commafeed
-      POSTGRES_PASSWORD: commafeed
-      POSTGRES_DB: commafeed
-    volumes:
-      - ./data:/var/lib/postgresql
-```
-
-CommaFeed also supports:
-
-- MySQL:
-  `QUARKUS_DATASOURCE_JDBC_URL=jdbc:mysql://localhost/commafeed?autoReconnect=true&failOverReadOnly=false&maxReconnects=20&rewriteBatchedStatements=true&timezone=UTC`
-- MariaDB:
-  `QUARKUS_DATASOURCE_JDBC_URL=jdbc:mariadb://localhost/commafeed?autoReconnect=true&failOverReadOnly=false&maxReconnects=20&rewriteBatchedStatements=true&timezone=UTC`
-
 ## Configuration
 
-All [CommaFeed settings](https://athou.github.io/commafeed/documentation) are
-optional and have sensible default values.
+All [CommaFeed settings](https://athou.github.io/commafeed/documentation) (upstream documentation, which also applies to
+this image) are optional and have sensible default values.
 
 Settings are overrideable with environment variables. For instance, `commafeed.feed-refresh.interval-empirical` can be
 set with the `COMMAFEED_FEED_REFRESH_INTERVAL_EMPIRICAL` variable.
+
+When logging in, credentials are stored in an encrypted cookie. The encryption key is randomly generated at startup,
+meaning that you will have to log back in after each restart of the application. To prevent this, you can set the
+`QUARKUS_HTTP_AUTH_SESSION_ENCRYPTION_KEY` variable to a fixed value (min. 16 characters).
+All other Quarkus settings can be found [here](https://quarkus.io/guides/all-config).
 
 ### Running as a specific user (PUID/PGID)
 
@@ -85,13 +56,13 @@ unRAID, or the output of `id $USER` on a regular Linux host):
 docker run --name commafeed --detach --publish 8082:8082 --restart unless-stopped \
     --volume /path/to/commafeed/data:/commafeed/data \
     --env PUID=99 --env PGID=100 \
-    --memory 256M athou/commafeed:latest-h2
+    --memory 256M ghcr.io/gittimeraider/commafeed:latest
 ```
 
 ```
 services:
   commafeed:
-    image: athou/commafeed:latest-h2
+    image: ghcr.io/gittimeraider/commafeed:latest
     restart: unless-stopped
     environment:
       - PUID=99
@@ -113,7 +84,7 @@ up ownership of the data directory). `--cap-drop=ALL` removes those, so root ins
 privileges at all, and the container will fail to start.
 
 If you're already running the container with `--cap-drop=ALL` (or similar hardening), skip `PUID`/`PGID` entirely and
-run directly as your target user/group with docker's own `--user` flag instead — this needs no capabilities, since
+run directly as your target user/group with docker's own `--user` flag instead. This needs no capabilities, since
 the container never runs as root in the first place:
 
 ```
@@ -121,42 +92,26 @@ docker run --name commafeed --detach --publish 8082:8082 --restart unless-stoppe
     --volume /path/to/commafeed/data:/commafeed/data \
     --user 99:100 \
     --cap-drop=ALL --security-opt=no-new-privileges:true \
-    --memory 256M athou/commafeed:latest-h2
+    --memory 256M ghcr.io/gittimeraider/commafeed:latest
 ```
 
 This only works if `/path/to/commafeed/data` is already owned by that user/group on the host (e.g. `chown -R 99:100
 /path/to/commafeed/data`), since the container can no longer fix that up itself without `CAP_CHOWN`.
 
-When logging in, credentials are stored in an encrypted cookie. The encryption key is randomly generated at startup,
-meaning that you will have to log back in after each restart of the application. To prevent this, you can set the
-`QUARKUS_HTTP_AUTH_SESSION_ENCRYPTION_KEY` variable to a fixed value (min. 16 characters).
-All other Quarkus settings can be found [here](https://quarkus.io/guides/all-config).
+## Image and tags
 
-### Updates
+A single image is published: H2 embedded database, native build, `linux/amd64` only. It's built and pushed on every
+push to the repository (except commits that only change `.md` files), and can also be triggered manually from the
+"Actions" tab on GitHub (select the `ci` workflow, then "Run workflow").
 
-When CommaFeed is up and running, you can subscribe to [this feed](https://github.com/Athou/commafeed/releases.atom) to be notified of new releases.
+Tags:
 
-## Docker tags
+- `latest`: the latest push to `master`
+- `<branch>`: the latest push to that branch (e.g. `master`)
+- `<branch>-<short-sha>`: pinned to one exact commit (e.g. `master-a1b2c3d`)
 
-Tags are of the form `<version>-<database>[-jvm]` where:
-
-- `<version>` is either:
-    - a specific CommaFeed version (e.g. `5.0.0`)
-    - `latest` (always points to the latest version)
-    - `master` (always points to the latest git commit)
-- `<database>` is the database to use (`h2`, `postgresql`, `mysql` or `mariadb`)
-- `-jvm` is optional and indicates that CommaFeed is running on a JVM, and not compiled natively.
-
-## GitHub Container Registry
-
-This fork publishes a single image, `ghcr.io/gittimeraider/commafeed` (H2 database, native build, `linux/amd64`
-only). It's built and pushed automatically on every push to this repository (except commits that only change `.md`
-files), and can also be triggered manually from the "Actions" tab on GitHub (select the `ci` workflow, then
-"Run workflow").
-
-Tags are of the form `<branch>` (floating, updated on every matching push) and `<branch>-<short-sha>` (pinned to the
-exact commit), e.g. `ghcr.io/gittimeraider/commafeed:master` or `ghcr.io/gittimeraider/commafeed:master-a1b2c3d`.
-Pushes to `master` also update the `latest` tag.
+The image only includes the H2 database driver. To use PostgreSQL, MySQL or MariaDB instead, build from source with the
+matching Maven profile (see the main README).
 
 ## FAQ
 
@@ -165,4 +120,3 @@ Pushes to `master` also update the `latest` tag.
 CommaFeed blocks access to local resources by default to prevent [SSRF](https://en.wikipedia.org/wiki/Server-side_request_forgery) attacks.
 If you want to subscribe to feeds that are only available on your local network, you can disable this security measure by setting the `COMMAFEED_HTTP_CLIENT_BLOCK_LOCAL_ADDRESSES` variable to `false`.
 Do this only if you trust all users of your CommaFeed instance not to access private resources.
-
