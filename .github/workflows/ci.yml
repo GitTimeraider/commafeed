@@ -15,7 +15,9 @@ env:
 
 jobs:
   build:
-    if: github.event_name != 'pull_request' || github.actor != 'renovate[bot]' # renovate already triggers the build on pushes
+    # Dependabot branches are validated by their pull_request run; skip their push run so they don't publish
+    # throwaway images tagged with Dependabot branch names.
+    if: github.event_name != 'push' || github.actor != 'dependabot[bot]'
 
     runs-on: ubuntu-latest
     steps:
@@ -115,7 +117,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      ## build but don't push for PRs and renovate, just to validate the Dockerfile still builds
+      ## build but don't push for PRs (including Dependabot's), just to validate the Dockerfile still builds
       - name: Docker build
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         if: ${{ github.event_name == 'pull_request' }}
