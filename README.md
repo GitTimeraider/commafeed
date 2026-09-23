@@ -1,4 +1,4 @@
-# CommaFeed
+# CommaFeed fork with PUID and PGID environmentals
 
 Google Reader inspired self-hosted RSS reader, based on Quarkus and React/TypeScript.
 
