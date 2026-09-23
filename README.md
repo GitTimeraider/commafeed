@@ -15,6 +15,7 @@ the upstream project.
   `linux/amd64`) on every push, instead of the upstream Docker Hub images.
 - The CI pipeline is trimmed down to building and publishing that one image. It does not run the test suite, create
   GitHub releases, or publish precompiled packages.
+- Dependencies (Maven, npm, Docker base images and GitHub Actions) are checked weekly by Dependabot instead of Renovate.
 
 ## Features
 
